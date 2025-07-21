@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { 
   BookOpen, 
   Users, 
@@ -27,45 +29,121 @@ interface Course {
 
 interface TeacherDashboardProps {
   onLogout: () => void;
+  user: any;
+  profile: any;
 }
 
-export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
-  const [courses, setCourses] = useState<Course[]>([
-    {
-      id: '1',
-      title: 'Introduction to React',
-      description: 'Learn the fundamentals of React development',
-      students: 24,
-      createdAt: '2024-01-15'
-    },
-    {
-      id: '2',
-      title: 'Advanced JavaScript',
-      description: 'Deep dive into advanced JavaScript concepts',
-      students: 18,
-      createdAt: '2024-01-10'
-    }
-  ]);
-
+export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardProps) {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [totalStudents, setTotalStudents] = useState(0);
+  const [totalAssignments, setTotalAssignments] = useState(0);
   const [newCourse, setNewCourse] = useState({
     title: '',
     description: ''
   });
-
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  const createCourse = () => {
-    if (newCourse.title && newCourse.description) {
-      const course: Course = {
-        id: Date.now().toString(),
-        title: newCourse.title,
-        description: newCourse.description,
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      // Load courses with enrollment counts
+      const { data: coursesData, error: coursesError } = await supabase
+        .from('courses')
+        .select(`
+          *,
+          enrollments (count)
+        `)
+        .eq('instructor_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (coursesError) throw coursesError;
+
+      const coursesWithStudentCounts = coursesData?.map(course => ({
+        id: course.id,
+        title: course.title,
+        description: course.description,
+        students: course.enrollments?.[0]?.count || 0,
+        createdAt: new Date(course.created_at).toLocaleDateString()
+      })) || [];
+
+      setCourses(coursesWithStudentCounts);
+
+      // Calculate total students
+      const total = coursesWithStudentCounts.reduce((sum, course) => sum + course.students, 0);
+      setTotalStudents(total);
+
+      // Load assignments count
+      const { data: assignmentsData, error: assignmentsError } = await supabase
+        .from('assignments')
+        .select('id, course_id')
+        .in('course_id', coursesData?.map(c => c.id) || []);
+
+      if (assignmentsError) throw assignmentsError;
+      setTotalAssignments(assignmentsData?.length || 0);
+
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createCourse = async () => {
+    if (!newCourse.title || !newCourse.description) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('courses')
+        .insert([
+          {
+            title: newCourse.title,
+            description: newCourse.description,
+            instructor_id: user.id
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newCourseItem: Course = {
+        id: data.id,
+        title: data.title,
+        description: data.description,
         students: 0,
-        createdAt: new Date().toISOString().split('T')[0]
+        createdAt: new Date(data.created_at).toLocaleDateString()
       };
-      setCourses([course, ...courses]);
+
+      setCourses([newCourseItem, ...courses]);
       setNewCourse({ title: '', description: '' });
       setIsCreateDialogOpen(false);
+
+      toast({
+        title: "Success",
+        description: "Course created successfully!",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -77,7 +155,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center gap-3">
               <PenTool className="h-8 w-8 text-secondary" />
-              <h1 className="text-2xl font-bold text-foreground">Teacher Dashboard</h1>
+              <h1 className="text-2xl font-bold text-foreground">Welcome, {profile?.full_name}</h1>
             </div>
             <Button variant="outline" onClick={onLogout}>
               Logout
@@ -106,9 +184,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <div className="flex items-center gap-4">
                 <Users className="h-10 w-10 text-secondary" />
                 <div>
-                  <p className="text-2xl font-bold text-foreground">
-                    {courses.reduce((sum, course) => sum + course.students, 0)}
-                  </p>
+                  <p className="text-2xl font-bold text-foreground">{totalStudents}</p>
                   <p className="text-muted-foreground">Total Students</p>
                 </div>
               </div>
@@ -120,7 +196,7 @@ export function TeacherDashboard({ onLogout }: TeacherDashboardProps) {
               <div className="flex items-center gap-4">
                 <FileText className="h-10 w-10 text-accent" />
                 <div>
-                  <p className="text-2xl font-bold text-foreground">12</p>
+                  <p className="text-2xl font-bold text-foreground">{totalAssignments}</p>
                   <p className="text-muted-foreground">Assignments</p>
                 </div>
               </div>

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 import { 
   BookOpen, 
   Clock, 
@@ -35,60 +37,151 @@ interface Assignment {
 
 interface StudentDashboardProps {
   onLogout: () => void;
+  user: any;
+  profile: any;
 }
 
-export function StudentDashboard({ onLogout }: StudentDashboardProps) {
-  const [courses] = useState<Course[]>([
-    {
-      id: '1',
-      title: 'Introduction to React',
-      instructor: 'Dr. Smith',
-      progress: 75,
-      nextClass: '2024-01-20 10:00 AM',
-      status: 'active'
-    },
-    {
-      id: '2',
-      title: 'Advanced JavaScript',
-      instructor: 'Prof. Johnson',
-      progress: 45,
-      nextClass: '2024-01-21 2:00 PM',
-      status: 'active'
-    },
-    {
-      id: '3',
-      title: 'Web Design Principles',
-      instructor: 'Ms. Davis',
-      progress: 100,
-      nextClass: 'Completed',
-      status: 'completed'
-    }
-  ]);
+export function StudentDashboard({ onLogout, user, profile }: StudentDashboardProps) {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  const [assignments] = useState<Assignment[]>([
-    {
-      id: '1',
-      title: 'React Components Exercise',
-      course: 'Introduction to React',
-      dueDate: '2024-01-25',
-      status: 'pending'
-    },
-    {
-      id: '2',
-      title: 'JavaScript Functions Quiz',
-      course: 'Advanced JavaScript',
-      dueDate: '2024-01-22',
-      status: 'submitted'
-    },
-    {
-      id: '3',
-      title: 'Design Portfolio',
-      course: 'Web Design Principles',
-      dueDate: '2024-01-15',
-      status: 'graded',
-      grade: 92
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      // Load enrolled courses with instructor info
+      const { data: enrolledCoursesData, error: enrolledError } = await supabase
+        .from('enrollments')
+        .select(`
+          *,
+          courses (
+            id,
+            title,
+            description,
+            instructor_id
+          )
+        `)
+        .eq('student_id', user.id);
+
+      if (enrolledError) throw enrolledError;
+
+      // Get instructor names separately
+      const instructorIds = enrolledCoursesData?.map(e => e.courses?.instructor_id).filter(Boolean) || [];
+      let instructorMap: { [key: string]: string } = {};
+      
+      if (instructorIds.length > 0) {
+        const { data: instructorsData } = await supabase
+          .from('profiles')
+          .select('user_id, full_name')
+          .in('user_id', instructorIds);
+        
+        instructorMap = instructorsData?.reduce((acc, instructor) => {
+          acc[instructor.user_id] = instructor.full_name;
+          return acc;
+        }, {} as { [key: string]: string }) || {};
+      }
+
+      const coursesWithDetails: Course[] = enrolledCoursesData?.map(enrollment => ({
+        id: enrollment.courses?.id || '',
+        title: enrollment.courses?.title || '',
+        instructor: instructorMap[enrollment.courses?.instructor_id || ''] || 'Unknown',
+        progress: enrollment.progress || 0,
+        nextClass: 'Schedule TBD',
+        status: (enrollment.progress === 100 ? 'completed' : 'active') as 'active' | 'completed' | 'upcoming'
+      })) || [];
+
+      setCourses(coursesWithDetails);
+
+      // Load assignments for enrolled courses
+      const courseIds = coursesWithDetails.map(c => c.id);
+      if (courseIds.length > 0) {
+        const { data: assignmentsData, error: assignmentsError } = await supabase
+          .from('assignments')
+          .select(`
+            *,
+            courses (title),
+            assignment_submissions (grade, submitted_at, graded_at)
+          `)
+          .in('course_id', courseIds)
+          .order('due_date', { ascending: true });
+
+        if (assignmentsError) throw assignmentsError;
+
+        const assignmentsWithStatus = assignmentsData?.map(assignment => {
+          const submission = assignment.assignment_submissions?.[0];
+          let status: 'pending' | 'submitted' | 'graded' = 'pending';
+          
+          if (submission) {
+            status = submission.graded_at ? 'graded' : 'submitted';
+          }
+
+          return {
+            id: assignment.id,
+            title: assignment.title,
+            course: assignment.courses.title,
+            dueDate: new Date(assignment.due_date).toLocaleDateString(),
+            status,
+            grade: submission?.grade
+          };
+        }) || [];
+
+        setAssignments(assignmentsWithStatus);
+      }
+
+      // Load available courses for browsing
+      const { data: allCoursesData, error: allCoursesError } = await supabase
+        .from('courses')
+        .select('*')
+        .not('id', 'in', `(${courseIds.join(',') || 'null'})`);
+
+      if (allCoursesError) throw allCoursesError;
+      setAvailableCourses(allCoursesData || []);
+
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
+
+  const enrollInCourse = async (courseId: string) => {
+    try {
+      const { error } = await supabase
+        .from('enrollments')
+        .insert([
+          {
+            student_id: user.id,
+            course_id: courseId,
+            progress: 0
+          }
+        ]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Successfully enrolled in course!",
+      });
+
+      // Refresh data
+      loadDashboardData();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -122,7 +215,7 @@ export function StudentDashboard({ onLogout }: StudentDashboardProps) {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center gap-3">
               <User className="h-8 w-8 text-primary" />
-              <h1 className="text-2xl font-bold text-foreground">Student Dashboard</h1>
+              <h1 className="text-2xl font-bold text-foreground">Welcome, {profile?.full_name}</h1>
             </div>
             <Button variant="outline" onClick={onLogout}>
               Logout
@@ -189,9 +282,18 @@ export function StudentDashboard({ onLogout }: StudentDashboardProps) {
         <div className="mb-8">
           <h2 className="text-xl font-semibold text-foreground mb-4">Quick Actions</h2>
           <div className="flex flex-wrap gap-4">
-            <Button variant="student" className="flex items-center gap-2">
+            <Button 
+              variant="student" 
+              className="flex items-center gap-2"
+              onClick={() => {
+                toast({
+                  title: "Available Courses",
+                  description: `${availableCourses.length} courses available for enrollment`,
+                });
+              }}
+            >
               <BookOpen className="h-4 w-4" />
-              Browse Courses
+              Browse Courses ({availableCourses.length})
             </Button>
 
             <Button variant="outline" className="flex items-center gap-2">
