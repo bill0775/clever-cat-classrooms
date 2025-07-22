@@ -20,7 +20,8 @@ import {
   FileText,
   BarChart3,
   Settings,
-  CheckCircle
+  CheckCircle,
+  Video
 } from "lucide-react";
 
 interface Course {
@@ -332,6 +333,20 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
     setIsCourseDetailsOpen(true);
   };
 
+  const startLiveClass = (courseId: string, courseTitle: string) => {
+    // Generate a unique room ID
+    const roomId = `class-${courseId}-${Date.now()}`;
+    
+    toast({
+      title: "Live Class Started!",
+      description: `Starting live class for "${courseTitle}". Room ID: ${roomId}`,
+    });
+    
+    // Here you would typically integrate with a video conferencing service
+    // For now, we'll just show a confirmation
+    console.log(`Live class started for course ${courseId} with room ID: ${roomId}`);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -635,9 +650,21 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
                     </Card>
                   </div>
                   
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <Button 
                       variant="teacher" 
+                      className="flex-1"
+                      onClick={() => {
+                        if (courseDetails) {
+                          startLiveClass(courseDetails.id, courseDetails.title);
+                        }
+                      }}
+                    >
+                      <Video className="h-4 w-4 mr-2" />
+                      Start Live Class
+                    </Button>
+                    <Button 
+                      variant="outline" 
                       className="flex-1"
                       onClick={() => {
                         if (courseDetails) {

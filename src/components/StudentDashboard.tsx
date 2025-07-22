@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -17,7 +18,9 @@ import {
   FileText,
   Award,
   GraduationCap,
-  Search
+  Search,
+  Video,
+  Users
 } from "lucide-react";
 
 interface Course {
@@ -44,10 +47,23 @@ interface StudentDashboardProps {
   profile: any;
 }
 
+interface CourseDetails {
+  id: string;
+  title: string;
+  description: string;
+  instructor: string;
+  progress: number;
+  enrolledDate: string;
+  totalAssignments: number;
+  completedAssignments: number;
+}
+
 export function StudentDashboard({ onLogout, user, profile }: StudentDashboardProps) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [availableCourses, setAvailableCourses] = useState<any[]>([]);
+  const [courseDetails, setCourseDetails] = useState<CourseDetails | null>(null);
+  const [isCourseDetailsOpen, setIsCourseDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -177,6 +193,69 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
 
       // Refresh data
       loadDashboardData();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const loadCourseDetails = async (courseId: string) => {
+    try {
+      // Get detailed course info
+      const { data: courseData, error: courseError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('id', courseId)
+        .single();
+
+      if (courseError) throw courseError;
+
+      // Get enrollment info
+      const { data: enrollmentData, error: enrollmentError } = await supabase
+        .from('enrollments')
+        .select('*')
+        .eq('course_id', courseId)
+        .eq('student_id', user.id)
+        .single();
+
+      if (enrollmentError) throw enrollmentError;
+
+      // Get instructor name
+      const { data: instructorData } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('user_id', courseData.instructor_id)
+        .single();
+
+      // Get assignment stats
+      const { data: assignmentsData } = await supabase
+        .from('assignments')
+        .select('id')
+        .eq('course_id', courseId);
+
+      const { data: submissionsData } = await supabase
+        .from('assignment_submissions')
+        .select('assignment_id')
+        .eq('student_id', user.id)
+        .in('assignment_id', assignmentsData?.map(a => a.id) || []);
+
+      const details: CourseDetails = {
+        id: courseData.id,
+        title: courseData.title,
+        description: courseData.description,
+        instructor: instructorData?.full_name || 'Unknown',
+        progress: enrollmentData.progress || 0,
+        enrolledDate: new Date(enrollmentData.enrolled_at).toLocaleDateString(),
+        totalAssignments: assignmentsData?.length || 0,
+        completedAssignments: submissionsData?.length || 0
+      };
+
+      setCourseDetails(details);
+      setIsCourseDetailsOpen(true);
+
     } catch (error: any) {
       toast({
         title: "Error",
@@ -344,7 +423,11 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
                         <Button size="sm" variant="default" className="flex-1">
                           Continue Learning
                         </Button>
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => loadCourseDetails(course.id)}
+                        >
                           Details
                         </Button>
                       </div>
@@ -520,6 +603,83 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Course Details Dialog */}
+        <Dialog open={isCourseDetailsOpen} onOpenChange={setIsCourseDetailsOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{courseDetails?.title}</DialogTitle>
+              <DialogDescription>Course Information and Progress</DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-2">Course Description</h3>
+                <p className="text-muted-foreground">{courseDetails?.description}</p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <Card className="bg-gradient-card">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Users className="h-8 w-8 text-primary" />
+                      <div>
+                        <p className="text-lg font-bold text-foreground">{courseDetails?.instructor}</p>
+                        <p className="text-sm text-muted-foreground">Instructor</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-gradient-card">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-8 w-8 text-secondary" />
+                      <div>
+                        <p className="text-lg font-bold text-foreground">{courseDetails?.enrolledDate}</p>
+                        <p className="text-sm text-muted-foreground">Enrolled</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                <Card className="bg-gradient-card">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-foreground">{courseDetails?.progress}%</div>
+                    <div className="text-sm text-muted-foreground">Progress</div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-gradient-card">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-foreground">{courseDetails?.totalAssignments}</div>
+                    <div className="text-sm text-muted-foreground">Total Assignments</div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="bg-gradient-card">
+                  <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-foreground">{courseDetails?.completedAssignments}</div>
+                    <div className="text-sm text-muted-foreground">Completed</div>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button variant="student" className="flex-1">
+                  <Play className="h-4 w-4 mr-2" />
+                  Continue Learning
+                </Button>
+                <Button variant="outline" className="flex-1">
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Message Instructor
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
