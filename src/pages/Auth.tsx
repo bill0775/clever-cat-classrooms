@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { BookOpen, Users } from "lucide-react";
+import { validateEmail, validatePassword, validateText, checkRateLimit } from "@/lib/validation";
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -16,16 +17,43 @@ export default function Auth() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<'teacher' | 'student'>('student');
+  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
   const { toast } = useToast();
   const navigate = useNavigate();
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setValidationErrors({});
+
+    // Rate limiting check
+    if (!checkRateLimit('signin', 5, 300000)) { // 5 attempts per 5 minutes
+      toast({
+        title: "Too many attempts",
+        description: "Please wait 5 minutes before trying again.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate inputs
+    const emailValidation = validateEmail(email);
+    const passwordValidation = validatePassword(password);
+    
+    const errors: {[key: string]: string} = {};
+    if (!emailValidation.isValid) errors.email = emailValidation.error!;
+    if (!passwordValidation.isValid) errors.password = passwordValidation.error!;
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: emailValidation.sanitized,
         password,
       });
 
@@ -52,15 +80,43 @@ export default function Auth() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setValidationErrors({});
+
+    // Rate limiting check
+    if (!checkRateLimit('signup', 3, 600000)) { // 3 attempts per 10 minutes
+      toast({
+        title: "Too many attempts",
+        description: "Please wait 10 minutes before trying again.",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate inputs
+    const emailValidation = validateEmail(email);
+    const passwordValidation = validatePassword(password);
+    const nameValidation = validateText(fullName, 100);
+    
+    const errors: {[key: string]: string} = {};
+    if (!emailValidation.isValid) errors.email = emailValidation.error!;
+    if (!passwordValidation.isValid) errors.password = passwordValidation.error!;
+    if (!nameValidation.isValid) errors.fullName = nameValidation.error!;
+    
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const { error } = await supabase.auth.signUp({
-        email,
+        email: emailValidation.sanitized,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
           data: {
-            full_name: fullName,
+            full_name: nameValidation.sanitized,
             role: role,
           },
         },
@@ -118,7 +174,12 @@ export default function Auth() {
                       onChange={(e) => setFullName(e.target.value)}
                       required
                       placeholder="Enter your full name"
+                      maxLength={100}
+                      className={validationErrors.fullName ? "border-red-500" : ""}
                     />
+                    {validationErrors.fullName && (
+                      <p className="text-sm text-red-500 mt-1">{validationErrors.fullName}</p>
+                    )}
                   </div>
                   <div>
                     <Label htmlFor="role">Role</Label>
@@ -153,7 +214,11 @@ export default function Auth() {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   placeholder="Enter your email"
+                  className={validationErrors.email ? "border-red-500" : ""}
                 />
+                {validationErrors.email && (
+                  <p className="text-sm text-red-500 mt-1">{validationErrors.email}</p>
+                )}
               </div>
               <div>
                 <Label htmlFor="password">Password</Label>
@@ -165,7 +230,11 @@ export default function Auth() {
                   required
                   placeholder="Enter your password"
                   minLength={6}
+                  className={validationErrors.password ? "border-red-500" : ""}
                 />
+                {validationErrors.password && (
+                  <p className="text-sm text-red-500 mt-1">{validationErrors.password}</p>
+                )}
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Loading..." : isSignUp ? "Create Account" : "Sign In"}
