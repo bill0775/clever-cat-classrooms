@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -14,7 +15,9 @@ import {
   User,
   Play,
   FileText,
-  Award
+  Award,
+  GraduationCap,
+  Search
 } from "lucide-react";
 
 interface Course {
@@ -215,7 +218,7 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center gap-3">
               <User className="h-8 w-8 text-primary" />
-              <h1 className="text-2xl font-bold text-foreground">Welcome, {profile?.full_name}</h1>
+              <h1 className="text-2xl font-bold text-foreground">Student Dashboard - {profile?.full_name}</h1>
             </div>
             <Button variant="outline" onClick={onLogout}>
               Logout
@@ -225,7 +228,7 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
+        {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-6">
@@ -257,7 +260,7 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
                 <Award className="h-10 w-10 text-secondary" />
                 <div>
                   <p className="text-2xl font-bold text-foreground">
-                    {Math.round(courses.reduce((sum, course) => sum + course.progress, 0) / courses.length)}%
+                    {Math.round(courses.reduce((sum, course) => sum + course.progress, 0) / courses.length) || 0}%
                   </p>
                   <p className="text-muted-foreground">Avg Progress</p>
                 </div>
@@ -278,46 +281,36 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
           </Card>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-foreground mb-4">Quick Actions</h2>
-          <div className="flex flex-wrap gap-4">
-            <Button 
-              variant="student" 
-              className="flex items-center gap-2"
-              onClick={() => {
-                toast({
-                  title: "Available Courses",
-                  description: `${availableCourses.length} courses available for enrollment`,
-                });
-              }}
-            >
+        {/* Main Tabs */}
+        <Tabs defaultValue="courses" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="courses" className="flex items-center gap-2">
               <BookOpen className="h-4 w-4" />
-              Browse Courses ({availableCourses.length})
-            </Button>
-
-            <Button variant="outline" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              View Schedule
-            </Button>
-
-            <Button variant="outline" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Open Chat
-            </Button>
-
-            <Button variant="outline" className="flex items-center gap-2">
+              My Courses
+            </TabsTrigger>
+            <TabsTrigger value="assignments" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
-              Submit Assignment
-            </Button>
-          </div>
-        </div>
+              Assignments
+            </TabsTrigger>
+            <TabsTrigger value="browse" className="flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Browse Courses
+            </TabsTrigger>
+            <TabsTrigger value="messages" className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Messages
+            </TabsTrigger>
+            <TabsTrigger value="grades" className="flex items-center gap-2">
+              <GraduationCap className="h-4 w-4" />
+              Grades
+            </TabsTrigger>
+          </TabsList>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Courses */}
-          <div>
-            <h2 className="text-xl font-semibold text-foreground mb-4">My Courses</h2>
-            <div className="space-y-4">
+          {/* My Courses Tab */}
+          <TabsContent value="courses" className="space-y-6">
+            <h2 className="text-xl font-semibold text-foreground">My Courses</h2>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {courses.map((course) => (
                 <Card key={course.id} className="bg-gradient-card shadow-card hover:shadow-elegant transition-all duration-300">
                   <CardHeader className="pb-3">
@@ -359,13 +352,27 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
                   </CardContent>
                 </Card>
               ))}
+              
+              {courses.length === 0 && (
+                <Card className="bg-gradient-card shadow-card col-span-full">
+                  <CardContent className="p-6">
+                    <div className="text-center py-8">
+                      <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-foreground mb-2">No courses enrolled yet</h3>
+                      <p className="text-muted-foreground mb-4">Browse available courses to get started</p>
+                      <Button variant="student">Browse Courses</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-          </div>
+          </TabsContent>
 
-          {/* Assignments */}
-          <div>
-            <h2 className="text-xl font-semibold text-foreground mb-4">Recent Assignments</h2>
-            <div className="space-y-4">
+          {/* Assignments Tab */}
+          <TabsContent value="assignments" className="space-y-6">
+            <h2 className="text-xl font-semibold text-foreground">My Assignments</h2>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {assignments.map((assignment) => (
                 <Card key={assignment.id} className="bg-gradient-card shadow-card hover:shadow-elegant transition-all duration-300">
                   <CardHeader className="pb-3">
@@ -397,9 +404,122 @@ export function StudentDashboard({ onLogout, user, profile }: StudentDashboardPr
                   </CardContent>
                 </Card>
               ))}
+              
+              {assignments.length === 0 && (
+                <Card className="bg-gradient-card shadow-card col-span-full">
+                  <CardContent className="p-6">
+                    <div className="text-center py-8">
+                      <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-foreground mb-2">No assignments yet</h3>
+                      <p className="text-muted-foreground">Assignments will appear here once you enroll in courses</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
-          </div>
-        </div>
+          </TabsContent>
+
+          {/* Browse Courses Tab */}
+          <TabsContent value="browse" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-foreground">Available Courses</h2>
+              <Badge variant="outline">{availableCourses.length} courses available</Badge>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {availableCourses.map((course) => (
+                <Card key={course.id} className="bg-gradient-card shadow-card hover:shadow-elegant transition-all duration-300 transform hover:scale-105">
+                  <CardHeader>
+                    <CardTitle className="text-foreground">{course.title}</CardTitle>
+                    <CardDescription>{course.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Created {new Date(course.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      variant="student" 
+                      className="w-full"
+                      onClick={() => enrollInCourse(course.id)}
+                    >
+                      Enroll Now
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              {availableCourses.length === 0 && (
+                <Card className="bg-gradient-card shadow-card col-span-full">
+                  <CardContent className="p-6">
+                    <div className="text-center py-8">
+                      <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-foreground mb-2">No new courses available</h3>
+                      <p className="text-muted-foreground">You're enrolled in all available courses!</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Messages Tab */}
+          <TabsContent value="messages" className="space-y-6">
+            <h2 className="text-xl font-semibold text-foreground">Messages</h2>
+            
+            <Card className="bg-gradient-card shadow-card">
+              <CardContent className="p-6">
+                <div className="text-center py-8">
+                  <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-foreground mb-2">Message Center</h3>
+                  <p className="text-muted-foreground mb-4">Communicate with your instructors and classmates</p>
+                  <Button variant="student">Open Chat</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Grades Tab */}
+          <TabsContent value="grades" className="space-y-6">
+            <h2 className="text-xl font-semibold text-foreground">My Grades</h2>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {assignments.filter(a => a.grade).map((assignment) => (
+                <Card key={assignment.id} className="bg-gradient-card shadow-card">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg text-foreground">{assignment.title}</CardTitle>
+                      <div className="text-2xl font-bold text-secondary">
+                        {assignment.grade}%
+                      </div>
+                    </div>
+                    <CardDescription>{assignment.course}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-sm text-muted-foreground">
+                      Submitted: {assignment.dueDate}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              {assignments.filter(a => a.grade).length === 0 && (
+                <Card className="bg-gradient-card shadow-card col-span-full">
+                  <CardContent className="p-6">
+                    <div className="text-center py-8">
+                      <GraduationCap className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-foreground mb-2">No grades yet</h3>
+                      <p className="text-muted-foreground">Complete assignments to see your grades here</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { 
@@ -16,7 +17,9 @@ import {
   Plus, 
   Calendar,
   Clock,
-  FileText
+  FileText,
+  BarChart3,
+  Settings
 } from "lucide-react";
 
 interface Course {
@@ -155,7 +158,7 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center gap-3">
               <PenTool className="h-8 w-8 text-secondary" />
-              <h1 className="text-2xl font-bold text-foreground">Welcome, {profile?.full_name}</h1>
+              <h1 className="text-2xl font-bold text-foreground">Teacher Dashboard - {profile?.full_name}</h1>
             </div>
             <Button variant="outline" onClick={onLogout}>
               Logout
@@ -165,7 +168,7 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
+        {/* Stats Overview */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-gradient-card shadow-card">
             <CardContent className="p-6">
@@ -216,101 +219,195 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
           </Card>
         </div>
 
-        {/* Quick Actions */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-foreground mb-4">Quick Actions</h2>
-          <div className="flex flex-wrap gap-4">
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="teacher" className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Create Course
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Course</DialogTitle>
-                  <DialogDescription>
-                    Fill in the details to create a new course for your students.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="title">Course Title</Label>
-                    <Input
-                      id="title"
-                      value={newCourse.title}
-                      onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
-                      placeholder="Enter course title"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      value={newCourse.description}
-                      onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
-                      placeholder="Enter course description"
-                      rows={3}
-                    />
-                  </div>
-                  <Button onClick={createCourse} className="w-full">
+        {/* Main Tabs */}
+        <Tabs defaultValue="courses" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="courses" className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4" />
+              Courses
+            </TabsTrigger>
+            <TabsTrigger value="assignments" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Assignments
+            </TabsTrigger>
+            <TabsTrigger value="students" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Students
+            </TabsTrigger>
+            <TabsTrigger value="messages" className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4" />
+              Messages
+            </TabsTrigger>
+            <TabsTrigger value="analytics" className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Analytics
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Courses Tab */}
+          <TabsContent value="courses" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-foreground">Your Courses</h2>
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="teacher" className="flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
                     Create Course
                   </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Course</DialogTitle>
+                    <DialogDescription>
+                      Fill in the details to create a new course for your students.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="title">Course Title</Label>
+                      <Input
+                        id="title"
+                        value={newCourse.title}
+                        onChange={(e) => setNewCourse({ ...newCourse, title: e.target.value })}
+                        placeholder="Enter course title"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="description">Description</Label>
+                      <Textarea
+                        id="description"
+                        value={newCourse.description}
+                        onChange={(e) => setNewCourse({ ...newCourse, description: e.target.value })}
+                        placeholder="Enter course description"
+                        rows={3}
+                      />
+                    </div>
+                    <Button onClick={createCourse} className="w-full">
+                      Create Course
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {courses.map((course) => (
+                <Card key={course.id} className="bg-gradient-card shadow-card hover:shadow-elegant transition-all duration-300 transform hover:scale-105">
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span className="text-foreground">{course.title}</span>
+                      <Badge variant="secondary">{course.students} students</Badge>
+                    </CardTitle>
+                    <CardDescription>{course.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Created {course.createdAt}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="default" className="flex-1">
+                        Manage
+                      </Button>
+                      <Button size="sm" variant="outline" className="flex-1">
+                        View Details
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+
+          {/* Assignments Tab */}
+          <TabsContent value="assignments" className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold text-foreground">Assignments</h2>
+              <Button variant="teacher" className="flex items-center gap-2">
+                <Plus className="h-4 w-4" />
+                Create Assignment
+              </Button>
+            </div>
+            
+            <Card className="bg-gradient-card shadow-card">
+              <CardContent className="p-6">
+                <div className="text-center py-8">
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-foreground mb-2">No assignments yet</h3>
+                  <p className="text-muted-foreground mb-4">Create your first assignment to get started</p>
+                  <Button variant="teacher">Create Assignment</Button>
                 </div>
-              </DialogContent>
-            </Dialog>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            <Button variant="outline" className="flex items-center gap-2">
-              <PenTool className="h-4 w-4" />
-              Create Exam
-            </Button>
+          {/* Students Tab */}
+          <TabsContent value="students" className="space-y-6">
+            <h2 className="text-xl font-semibold text-foreground">Student Management</h2>
+            
+            <Card className="bg-gradient-card shadow-card">
+              <CardContent className="p-6">
+                <div className="text-center py-8">
+                  <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-foreground mb-2">Student Overview</h3>
+                  <p className="text-muted-foreground mb-4">View and manage your students across all courses</p>
+                  <p className="text-sm text-muted-foreground">Total enrolled students: {totalStudents}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            <Button variant="outline" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Schedule Class
-            </Button>
+          {/* Messages Tab */}
+          <TabsContent value="messages" className="space-y-6">
+            <h2 className="text-xl font-semibold text-foreground">Messages</h2>
+            
+            <Card className="bg-gradient-card shadow-card">
+              <CardContent className="p-6">
+                <div className="text-center py-8">
+                  <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-foreground mb-2">Message Center</h3>
+                  <p className="text-muted-foreground mb-4">Communicate with your students</p>
+                  <Button variant="teacher">Open Chat</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            <Button variant="outline" className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4" />
-              Open Chat
-            </Button>
-          </div>
-        </div>
-
-        {/* Courses Grid */}
-        <div>
-          <h2 className="text-xl font-semibold text-foreground mb-4">Your Courses</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {courses.map((course) => (
-              <Card key={course.id} className="bg-gradient-card shadow-card hover:shadow-elegant transition-all duration-300 transform hover:scale-105">
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="space-y-6">
+            <h2 className="text-xl font-semibold text-foreground">Analytics</h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="bg-gradient-card shadow-card">
                 <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span className="text-foreground">{course.title}</span>
-                    <Badge variant="secondary">{course.students} students</Badge>
-                  </CardTitle>
-                  <CardDescription>{course.description}</CardDescription>
+                  <CardTitle>Course Performance</CardTitle>
+                  <CardDescription>Track how your courses are performing</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground mb-4">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Created {course.createdAt}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="default" className="flex-1">
-                      Manage
-                    </Button>
-                    <Button size="sm" variant="outline" className="flex-1">
-                      View Details
-                    </Button>
+                  <div className="text-center py-4">
+                    <BarChart3 className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Analytics coming soon</p>
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        </div>
+              
+              <Card className="bg-gradient-card shadow-card">
+                <CardHeader>
+                  <CardTitle>Student Engagement</CardTitle>
+                  <CardDescription>See how engaged your students are</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center py-4">
+                    <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Engagement metrics coming soon</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
