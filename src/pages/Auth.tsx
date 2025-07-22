@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,7 @@ export default function Auth() {
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<'teacher' | 'student'>('student');
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +35,9 @@ export default function Auth() {
         title: "Welcome back!",
         description: "You have been signed in successfully.",
       });
+      
+      // Navigate to dashboard
+      navigate("/");
     } catch (error: any) {
       toast({
         title: "Error",
