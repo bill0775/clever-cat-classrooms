@@ -207,11 +207,16 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
       setEnrolledStudents(enrolled);
 
       // Load available students (not enrolled in this course)
-      const { data: allStudentsData, error: allStudentsError } = await supabase
+      let allStudentsQuery = supabase
         .from('profiles')
         .select('user_id, full_name')
-        .eq('role', 'student')
-        .not('user_id', 'in', studentIds.length > 0 ? `(${studentIds.join(',')})` : '(null)');
+        .eq('role', 'student');
+
+      if (studentIds.length > 0) {
+        allStudentsQuery = allStudentsQuery.not('user_id', 'in', `(${studentIds.join(',')})`);
+      }
+
+      const { data: allStudentsData, error: allStudentsError } = await allStudentsQuery;
 
       if (allStudentsError) throw allStudentsError;
 
