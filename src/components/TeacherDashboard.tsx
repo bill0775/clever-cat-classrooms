@@ -55,8 +55,17 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
     title: '',
     description: ''
   });
+  const [newAssignment, setNewAssignment] = useState({
+    title: '',
+    description: '',
+    dueDate: '',
+    courseId: ''
+  });
+  const [courseDetails, setCourseDetails] = useState<Course | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
   const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false);
+  const [isCourseDetailsOpen, setIsCourseDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -275,6 +284,54 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
     setIsEnrollDialogOpen(true);
   };
 
+  const createAssignment = async () => {
+    if (!newAssignment.title || !newAssignment.description || !newAssignment.courseId) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('assignments')
+        .insert([
+          {
+            title: newAssignment.title,
+            description: newAssignment.description,
+            course_id: newAssignment.courseId,
+            due_date: newAssignment.dueDate ? new Date(newAssignment.dueDate).toISOString() : null
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setNewAssignment({ title: '', description: '', dueDate: '', courseId: '' });
+      setIsCreateAssignmentOpen(false);
+      setTotalAssignments(prev => prev + 1);
+
+      toast({
+        title: "Success",
+        description: "Assignment created successfully!",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openCourseDetails = (course: Course) => {
+    setCourseDetails(course);
+    setIsCourseDetailsOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -441,7 +498,12 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
                       >
                         Manage Students
                       </Button>
-                      <Button size="sm" variant="outline" className="flex-1">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="flex-1"
+                        onClick={() => openCourseDetails(course)}
+                      >
                         View Details
                       </Button>
                     </div>
@@ -532,16 +594,140 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Course Details Dialog */}
+            <Dialog open={isCourseDetailsOpen} onOpenChange={setIsCourseDetailsOpen}>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>{courseDetails?.title}</DialogTitle>
+                  <DialogDescription>Course Information and Statistics</DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold mb-2">Description</h3>
+                    <p className="text-muted-foreground">{courseDetails?.description}</p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <Card className="bg-gradient-card">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <Users className="h-8 w-8 text-secondary" />
+                          <div>
+                            <p className="text-2xl font-bold text-foreground">{courseDetails?.students}</p>
+                            <p className="text-sm text-muted-foreground">Enrolled Students</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-gradient-card">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <Calendar className="h-8 w-8 text-primary" />
+                          <div>
+                            <p className="text-lg font-bold text-foreground">{courseDetails?.createdAt}</p>
+                            <p className="text-sm text-muted-foreground">Created</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="teacher" 
+                      className="flex-1"
+                      onClick={() => {
+                        if (courseDetails) {
+                          openEnrollDialog(courseDetails.id);
+                          setIsCourseDetailsOpen(false);
+                        }
+                      }}
+                    >
+                      <Users className="h-4 w-4 mr-2" />
+                      Manage Students
+                    </Button>
+                    <Button variant="outline" className="flex-1">
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Message Students
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* Assignments Tab */}
           <TabsContent value="assignments" className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold text-foreground">Assignments</h2>
-              <Button variant="teacher" className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Create Assignment
-              </Button>
+              <Dialog open={isCreateAssignmentOpen} onOpenChange={setIsCreateAssignmentOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="teacher" className="flex items-center gap-2">
+                    <Plus className="h-4 w-4" />
+                    Create Assignment
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Assignment</DialogTitle>
+                    <DialogDescription>
+                      Create an assignment for one of your courses.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="assignmentTitle">Assignment Title</Label>
+                      <Input
+                        id="assignmentTitle"
+                        value={newAssignment.title}
+                        onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })}
+                        placeholder="Enter assignment title"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="assignmentDescription">Description</Label>
+                      <Textarea
+                        id="assignmentDescription"
+                        value={newAssignment.description}
+                        onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
+                        placeholder="Enter assignment description"
+                        rows={3}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="courseSelect">Course</Label>
+                      <select
+                        id="courseSelect"
+                        value={newAssignment.courseId}
+                        onChange={(e) => setNewAssignment({ ...newAssignment, courseId: e.target.value })}
+                        className="w-full p-2 border rounded-md bg-background"
+                      >
+                        <option value="">Select a course</option>
+                        {courses.map((course) => (
+                          <option key={course.id} value={course.id}>
+                            {course.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="dueDate">Due Date (Optional)</Label>
+                      <Input
+                        id="dueDate"
+                        type="datetime-local"
+                        value={newAssignment.dueDate}
+                        onChange={(e) => setNewAssignment({ ...newAssignment, dueDate: e.target.value })}
+                      />
+                    </div>
+                    <Button onClick={createAssignment} className="w-full">
+                      Create Assignment
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
             
             <Card className="bg-gradient-card shadow-card">
@@ -550,7 +736,12 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
                   <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-foreground mb-2">No assignments yet</h3>
                   <p className="text-muted-foreground mb-4">Create your first assignment to get started</p>
-                  <Button variant="teacher">Create Assignment</Button>
+                  <Button 
+                    variant="teacher"
+                    onClick={() => setIsCreateAssignmentOpen(true)}
+                  >
+                    Create Assignment
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -606,7 +797,15 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
                   <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-foreground mb-2">Message Center</h3>
                   <p className="text-muted-foreground mb-4">Communicate with your students</p>
-                  <Button variant="teacher">Open Chat</Button>
+                  <Button 
+                    variant="teacher"
+                    onClick={() => toast({
+                      title: "Chat Feature",
+                      description: "Chat functionality will be available soon!",
+                    })}
+                  >
+                    Open Chat
+                  </Button>
                 </div>
               </CardContent>
             </Card>
