@@ -19,7 +19,8 @@ import {
   Clock,
   FileText,
   BarChart3,
-  Settings
+  Settings,
+  CheckCircle
 } from "lucide-react";
 
 interface Course {
@@ -28,6 +29,13 @@ interface Course {
   description: string;
   students: number;
   createdAt: string;
+}
+
+interface Student {
+  id: string;
+  full_name: string;
+  email: string;
+  enrolled_at?: string;
 }
 
 interface TeacherDashboardProps {
@@ -40,17 +48,27 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
   const [courses, setCourses] = useState<Course[]>([]);
   const [totalStudents, setTotalStudents] = useState(0);
   const [totalAssignments, setTotalAssignments] = useState(0);
+  const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
+  const [enrolledStudents, setEnrolledStudents] = useState<Student[]>([]);
+  const [availableStudents, setAvailableStudents] = useState<Student[]>([]);
   const [newCourse, setNewCourse] = useState({
     title: '',
     description: ''
   });
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEnrollDialogOpen, setIsEnrollDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (selectedCourse) {
+      loadCourseStudents(selectedCourse);
+    }
+  }, [selectedCourse]);
 
   const loadDashboardData = async () => {
     try {
@@ -148,6 +166,108 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
         variant: "destructive",
       });
     }
+  };
+
+  const loadCourseStudents = async (courseId: string) => {
+    try {
+      // Load enrolled students for the course
+      const { data: enrolledData, error: enrolledError } = await supabase
+        .from('enrollments')
+        .select('enrolled_at, student_id')
+        .eq('course_id', courseId);
+
+      if (enrolledError) throw enrolledError;
+
+      // Get student profiles
+      const studentIds = enrolledData?.map(e => e.student_id) || [];
+      let enrolledStudentProfiles: any[] = [];
+      
+      if (studentIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('user_id, full_name')
+          .in('user_id', studentIds);
+
+        if (profilesError) throw profilesError;
+        enrolledStudentProfiles = profilesData || [];
+      }
+
+      // Combine enrollment data with profiles
+      const enrolled: Student[] = enrolledData?.map(enrollment => {
+        const profile = enrolledStudentProfiles.find(p => p.user_id === enrollment.student_id);
+        const fullName = profile?.full_name || 'Unknown';
+        return {
+          id: enrollment.student_id,
+          full_name: fullName,
+          email: `${fullName.toLowerCase().replace(/\s+/g, '.')}@student.com`,
+          enrolled_at: enrollment.enrolled_at
+        };
+      }) || [];
+
+      setEnrolledStudents(enrolled);
+
+      // Load available students (not enrolled in this course)
+      const { data: allStudentsData, error: allStudentsError } = await supabase
+        .from('profiles')
+        .select('user_id, full_name')
+        .eq('role', 'student')
+        .not('user_id', 'in', studentIds.length > 0 ? `(${studentIds.join(',')})` : '(null)');
+
+      if (allStudentsError) throw allStudentsError;
+
+      const available: Student[] = allStudentsData?.map(student => ({
+        id: student.user_id,
+        full_name: student.full_name,
+        email: `${student.full_name?.toLowerCase().replace(/\s+/g, '.')}@student.com` || 'unknown@student.com'
+      })) || [];
+
+      setAvailableStudents(available);
+
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const enrollStudent = async (studentId: string, courseId: string) => {
+    try {
+      const { error } = await supabase
+        .from('enrollments')
+        .insert([
+          {
+            student_id: studentId,
+            course_id: courseId,
+            progress: 0
+          }
+        ]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Student enrolled successfully!",
+      });
+
+      // Refresh course students
+      loadCourseStudents(courseId);
+      // Refresh dashboard data to update counts
+      loadDashboardData();
+
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openEnrollDialog = (courseId: string) => {
+    setSelectedCourse(courseId);
+    setIsEnrollDialogOpen(true);
   };
 
   return (
@@ -308,8 +428,13 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="default" className="flex-1">
-                        Manage
+                      <Button 
+                        size="sm" 
+                        variant="default" 
+                        className="flex-1"
+                        onClick={() => openEnrollDialog(course.id)}
+                      >
+                        Manage Students
                       </Button>
                       <Button size="sm" variant="outline" className="flex-1">
                         View Details
@@ -319,6 +444,89 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
                 </Card>
               ))}
             </div>
+
+            {/* Enrollment Management Dialog */}
+            <Dialog open={isEnrollDialogOpen} onOpenChange={setIsEnrollDialogOpen}>
+              <DialogContent className="max-w-4xl">
+                <DialogHeader>
+                  <DialogTitle>Manage Course Enrollment</DialogTitle>
+                  <DialogDescription>
+                    View enrolled students and add new ones to the course.
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Enrolled Students */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Enrolled Students ({enrolledStudents.length})</h3>
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {enrolledStudents.map((student) => (
+                        <Card key={student.id} className="bg-gradient-card">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-foreground">{student.full_name}</p>
+                                <p className="text-sm text-muted-foreground">{student.email}</p>
+                                {student.enrolled_at && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Enrolled: {new Date(student.enrolled_at).toLocaleDateString()}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge variant="secondary">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Enrolled
+                              </Badge>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      
+                      {enrolledStudents.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Users className="h-8 w-8 mx-auto mb-2" />
+                          <p>No students enrolled yet</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Available Students */}
+                  <div>
+                    <h3 className="text-lg font-semibold mb-4">Available Students ({availableStudents.length})</h3>
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {availableStudents.map((student) => (
+                        <Card key={student.id} className="bg-gradient-card">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="font-medium text-foreground">{student.full_name}</p>
+                                <p className="text-sm text-muted-foreground">{student.email}</p>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="teacher"
+                                onClick={() => selectedCourse && enrollStudent(student.id, selectedCourse)}
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Enroll
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                      
+                      {availableStudents.length === 0 && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <CheckCircle className="h-8 w-8 mx-auto mb-2" />
+                          <p>All students are enrolled!</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </TabsContent>
 
           {/* Assignments Tab */}
@@ -347,16 +555,40 @@ export function TeacherDashboard({ onLogout, user, profile }: TeacherDashboardPr
           <TabsContent value="students" className="space-y-6">
             <h2 className="text-xl font-semibold text-foreground">Student Management</h2>
             
-            <Card className="bg-gradient-card shadow-card">
-              <CardContent className="p-6">
-                <div className="text-center py-8">
-                  <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-foreground mb-2">Student Overview</h3>
-                  <p className="text-muted-foreground mb-4">View and manage your students across all courses</p>
-                  <p className="text-sm text-muted-foreground">Total enrolled students: {totalStudents}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {courses.map((course) => (
+                <Card key={course.id} className="bg-gradient-card shadow-card">
+                  <CardHeader>
+                    <CardTitle className="text-foreground">{course.title}</CardTitle>
+                    <CardDescription>
+                      {course.students} student{course.students !== 1 ? 's' : ''} enrolled
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      variant="teacher" 
+                      className="w-full"
+                      onClick={() => openEnrollDialog(course.id)}
+                    >
+                      <Users className="h-4 w-4 mr-2" />
+                      Manage Enrollment
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              {courses.length === 0 && (
+                <Card className="bg-gradient-card shadow-card col-span-full">
+                  <CardContent className="p-6">
+                    <div className="text-center py-8">
+                      <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-foreground mb-2">No courses created yet</h3>
+                      <p className="text-muted-foreground">Create a course first to manage student enrollments</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </TabsContent>
 
           {/* Messages Tab */}
